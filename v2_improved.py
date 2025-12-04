@@ -122,6 +122,67 @@ class GateIOTrader:
             logger.error(f"API异常: {e}")
         return None
     
+    def get_position_info(self) -> Optional[Dict]:
+        """获取当前仓位信息（现货交易）
+        
+        Returns:
+            包含仓位信息的字典，包括：
+            - base_currency_balance: 基础币种（如BTC）的余额
+            - quote_currency_balance: 计价币种（如USDT）的余额
+            - position_value: 仓位价值
+            - total_assets: 总资产价值
+        """
+        try:
+            # 获取交易对的两个币种
+            pair_parts = self.config.CURRENCY_PAIR.split('_')
+            base_currency = pair_parts[0]  # 如BTC
+            quote_currency = pair_parts[1]  # 如USDT
+            
+            # 获取基础币种余额
+            base_accounts = self.spot_api.list_spot_accounts(currency=base_currency)
+            base_available = D(0)
+            base_locked = D(0)
+            if base_accounts:
+                base_available = D(base_accounts[0].available)
+                base_locked = D(base_accounts[0].locked)
+            
+            # 获取计价币种余额
+            quote_accounts = self.spot_api.list_spot_accounts(currency=quote_currency)
+            quote_available = D(0)
+            quote_locked = D(0)
+            if quote_accounts:
+                quote_available = D(quote_accounts[0].available)
+                quote_locked = D(quote_accounts[0].locked)
+            
+            # 获取当前价格
+            ticker = self.get_ticker()
+            current_price = ticker['last'] if ticker else D(0)
+            
+            # 计算仓位价值
+            base_position_value = (base_available + base_locked) * current_price
+            quote_total = quote_available + quote_locked
+            total_assets = base_position_value + quote_total
+            
+            return {
+                'base_currency': base_currency,
+                'quote_currency': quote_currency,
+                'base_available': base_available,  # 可用的基础币
+                'base_locked': base_locked,         # 冻结的基础币
+                'base_total': base_available + base_locked,  # 基础币总量
+                'quote_available': quote_available,  # 可用的计价币
+                'quote_locked': quote_locked,        # 冻结的计价币
+                'quote_total': quote_total,          # 计价币总量
+                'current_price': current_price,      # 当前价格
+                'base_position_value': base_position_value,  # 基础币的价值
+                'total_assets': total_assets,        # 总资产价值
+                'position_ratio': base_position_value / total_assets if total_assets > 0 else D(0)  # 仓位占比
+            }
+        except GateApiException as ex:
+            logger.error(f"Gate API异常 - {ex.label}: {ex.message}")
+        except ApiException as e:
+            logger.error(f"API异常: {e}")
+        return None
+    
     def place_order(self, side: str, amount: D, price: D) -> Optional[str]:
         """下单
         

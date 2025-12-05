@@ -12,16 +12,90 @@
 
 import time
 import logging
+import os
+from pathlib import Path
 from decimal import Decimal as D
 from typing import Optional, Dict, List
 import gate_api
 from gate_api.exceptions import ApiException, GateApiException
+import socket
+import requests
+
+# ============ 网络检测函数 ============
+def check_network() -> bool:
+    """检测网络连接是否正常"""
+    try:
+        # 尝试连接到公共DNS服务器
+        socket.create_connection(("8.8.8.8", 53), timeout=3)
+        return True
+    except (socket.timeout, socket.error):
+        try:
+            # 备用方案：尝试连接到百度
+            requests.get("https://www.baidu.com", timeout=3)
+            return True
+        except:
+            return False
+
+
+# ============ 配置加载函数 ============
+def load_env_config():
+    """从环境变量或 .env 文件加载配置"""
+    # 尝试加载的 .env 文件路径列表（按优先级）
+    env_paths = [
+        Path(__file__).parent / ".env",  # 项目目录
+        Path("C:/Users/admin/Desktop/gatekey.env"),  # 用户指定的路径
+    ]
+    
+    for env_path in env_paths:
+        if env_path.exists():
+            logger.info(f"加载配置文件: {env_path}")
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            os.environ.setdefault(key.strip(), value.strip())
+            break
+    
+    api_key = os.getenv('GATE_API_KEY')
+    api_secret = os.getenv('GATE_API_SECRET')
+    
+    if not api_key or not api_secret:
+        raise ValueError(
+            "❌ 错误: 未找到 API 密钥配置\n"
+            "请使用以下方式之一设置密钥:\n"
+            "  1. 环境变量: export GATE_API_KEY=xxx && export GATE_API_SECRET=xxx\n"
+            "  2. .env 文件: 在项目根目录创建 .env，或使用 C:\\Users\\admin\\Desktop\\gatekey.env\n"
+            "     GATE_API_KEY=your_api_key\n"
+            "     GATE_API_SECRET=your_api_secret"
+        )
+    
+    return api_key, api_secret
 
 # ============ 配置部分 ============
 class TradingConfig:
     """交易配置类"""
-    API_KEY = "你的_API_KEY"
-    API_SECRET = "你的_API_SECRET"
+    # 从环境变量或 .env 文件加载 API 密钥
+    _api_key = None
+    _api_secret = None
+    
+    def __init__(self):
+        """初始化配置，加载 API 密钥"""
+        if TradingConfig._api_key is None:
+            try:
+                TradingConfig._api_key, TradingConfig._api_secret = load_env_config()
+            except ValueError as e:
+                logger.error(str(e))
+                raise
+    
+    @property
+    def API_KEY(self):
+        return TradingConfig._api_key
+    
+    @property
+    def API_SECRET(self):
+        return TradingConfig._api_secret
     
     # API端点
     LIVE_HOST = "https://api.gateio.ws/api/v4"  # 实盘
@@ -79,14 +153,36 @@ class GateIOTrader:
         """获取交易对行情"""
         try:
             tickers = self.spot_api.list_tickers(currency_pair=self.config.CURRENCY_PAIR)
-            if tickers:
-                ticker = tickers[0]
+            if tickers:  # type: ignore
+                ticker = tickers[0]  # type: ignore
+                last_price = getattr(ticker, 'last', None)
+                high_24h = getattr(ticker, 'high_24h', None)
+                low_24h = getattr(ticker, 'low_24h', None)
+                volume_24h = getattr(ticker, 'volume_24h', None)
+                
                 return {
-                    'last': D(ticker.last),
-                    'high_24h': D(ticker.high_24h),
-                    'low_24h': D(ticker.low_24h),
-                    'volume_24h': D(ticker.volume_24h)
+                    'last': D(last_price) if last_price else D(0),
+                    'high_24h': D(high_24h) if high_24h else D(0),
+                    'low_24h': D(low_24h) if low_24h else D(0),
+                    'volume_24h': D(volume_24h) if volume_24h else D(0)
                 }
+        except AttributeError as ae:
+            logger.warning(f"Ticker 属性缺失: {ae}，返回基础数据")
+            try:
+                if tickers:  # type: ignore
+                    ticker = tickers[0]  # type: ignore
+                    last_price = getattr(ticker, 'last', None)
+                    high_24h = getattr(ticker, 'high_24h', None)
+                    low_24h = getattr(ticker, 'low_24h', None)
+                    
+                    return {
+                        'last': D(last_price) if last_price else D(0),
+                        'high_24h': D(high_24h) if high_24h else D(0),
+                        'low_24h': D(low_24h) if low_24h else D(0),
+                        'volume_24h': D(0)
+                    }
+            except:
+                return None
         except GateApiException as ex:
             logger.error(f"Gate API异常 - {ex.label}: {ex.message}")
         except ApiException as e:
@@ -97,12 +193,14 @@ class GateIOTrader:
         """获取账户余额"""
         try:
             accounts = self.spot_api.list_spot_accounts(currency=self.config.CURRENCY)
-            if accounts:
-                account = accounts[0]
+            if accounts:  # type: ignore
+                account = accounts[0]  # type: ignore
+                available = getattr(account, 'available', '0')
+                locked = getattr(account, 'locked', '0')
                 return {
-                    'available': D(account.available),
-                    'locked': D(account.locked),
-                    'total': D(account.available) + D(account.locked)
+                    'available': D(available),
+                    'locked': D(locked),
+                    'total': D(available) + D(locked)
                 }
         except GateApiException as ex:
             logger.error(f"Gate API异常 - {ex.label}: {ex.message}")
@@ -114,8 +212,9 @@ class GateIOTrader:
         """获取特定加密货币余额"""
         try:
             accounts = self.spot_api.list_spot_accounts(currency=currency)
-            if accounts:
-                return D(accounts[0].available)
+            if accounts:  # type: ignore
+                available = getattr(accounts[0], 'available', '0')  # type: ignore
+                return D(available)
         except GateApiException as ex:
             logger.error(f"Gate API异常 - {ex.label}: {ex.message}")
         except ApiException as e:
@@ -142,17 +241,17 @@ class GateIOTrader:
             base_accounts = self.spot_api.list_spot_accounts(currency=base_currency)
             base_available = D(0)
             base_locked = D(0)
-            if base_accounts:
-                base_available = D(base_accounts[0].available)
-                base_locked = D(base_accounts[0].locked)
+            if base_accounts:  # type: ignore
+                base_available = D(getattr(base_accounts[0], 'available', '0'))  # type: ignore
+                base_locked = D(getattr(base_accounts[0], 'locked', '0'))  # type: ignore
             
             # 获取计价币种余额
             quote_accounts = self.spot_api.list_spot_accounts(currency=quote_currency)
             quote_available = D(0)
             quote_locked = D(0)
-            if quote_accounts:
-                quote_available = D(quote_accounts[0].available)
-                quote_locked = D(quote_accounts[0].locked)
+            if quote_accounts:  # type: ignore
+                quote_available = D(getattr(quote_accounts[0], 'available', '0'))  # type: ignore
+                quote_locked = D(getattr(quote_accounts[0], 'locked', '0'))  # type: ignore
             
             # 获取当前价格
             ticker = self.get_ticker()
@@ -201,10 +300,12 @@ class GateIOTrader:
                 amount=str(amount),
                 price=str(price)
             )
-            created = self.spot_api.create_order(order)
-            logger.info(f"✓ 下单成功 - {side.upper()} | ID: {created.id} | 状态: {created.status}")
+            created = self.spot_api.create_order(order)  # type: ignore
+            order_id = getattr(created, 'id', '')  # type: ignore
+            order_status = getattr(created, 'status', '')  # type: ignore
+            logger.info(f"✓ 下单成功 - {side.upper()} | ID: {order_id} | 状态: {order_status}")
             logger.info(f"  数量: {amount} | 价格: {price}")
-            return str(created.id)
+            return str(order_id)
         except GateApiException as ex:
             logger.error(f"下单失败 - {ex.label}: {ex.message}")
         except ApiException as e:
@@ -218,7 +319,8 @@ class GateIOTrader:
                 order_id,
                 currency_pair=self.config.CURRENCY_PAIR
             )
-            logger.info(f"✓ 订单已取消 - ID: {order_id} | 状态: {result.status}")
+            result_status = getattr(result, 'status', '')  # type: ignore
+            logger.info(f"✓ 订单已取消 - ID: {order_id} | 状态: {result_status}")
             return True
         except GateApiException as ex:
             logger.error(f"取消失败 - {ex.label}: {ex.message}")
@@ -233,13 +335,14 @@ class GateIOTrader:
                 order_id,
                 currency_pair=self.config.CURRENCY_PAIR
             )
+            filled_total = getattr(order, 'filled_total', None)  # type: ignore
             return {
-                'id': order.id,
-                'status': order.status,
-                'side': order.side,
-                'amount': D(order.amount),
-                'price': D(order.price),
-                'filled_total': D(order.filled_total) if order.filled_total else D(0)
+                'id': getattr(order, 'id', ''),  # type: ignore
+                'status': getattr(order, 'status', ''),  # type: ignore
+                'side': getattr(order, 'side', ''),  # type: ignore
+                'amount': D(getattr(order, 'amount', '0')),  # type: ignore
+                'price': D(getattr(order, 'price', '0')),  # type: ignore
+                'filled_total': D(filled_total) if filled_total else D(0)
             }
         except GateApiException as ex:
             logger.error(f"查询失败 - {ex.label}: {ex.message}")
@@ -256,12 +359,12 @@ class GateIOTrader:
             )
             return [
                 {
-                    'id': order.id,
-                    'side': order.side,
-                    'amount': D(order.amount),
-                    'price': D(order.price)
+                    'id': getattr(order, 'id', ''),  # type: ignore
+                    'side': getattr(order, 'side', ''),  # type: ignore
+                    'amount': D(getattr(order, 'amount', '0')),  # type: ignore
+                    'price': D(getattr(order, 'price', '0'))  # type: ignore
                 }
-                for order in orders
+                for order in orders  # type: ignore
             ]
         except GateApiException as ex:
             logger.error(f"查询订单列表失败 - {ex.label}: {ex.message}")
@@ -280,119 +383,37 @@ class TradingStrategy:
         self.last_buy_price = None  # 记录最后的买入价格
         self.buy_hold = False  # 是否持有买入仓位
     
-    def simple_strategy(self) -> bool:
-        """简单的买卖策略
-        
-        逻辑：
-        1. 如果价格低于目标买入价格，且未持仓，则买入
-        2. 如果已持仓且价格高于目标卖出价格，则卖出
-        
-        Returns:
-            bool: 是否执行了交易
-        """
-        # 获取行情
-        ticker = self.trader.get_ticker()
-        if not ticker:
-            return False
-        
-        current_price = ticker['last']
-        logger.info(f"当前价格: {current_price} USDT | 24h高: {ticker['high_24h']} | 24h低: {ticker['low_24h']}")
-        
-        # 获取余额
-        usdt_balance = self.trader.get_balance()
-        if not usdt_balance:
-            return False
-        
-        btc_balance = self.trader.get_cryptocurrency_balance("BTC")
-        logger.info(f"账户余额 - USDT: {usdt_balance['available']} | BTC: {btc_balance if btc_balance else 0}")
-        
-        # 买入逻辑
-        if current_price < self.config.TARGET_BUY_PRICE and not self.buy_hold:
-            required_usdt = current_price * self.config.BUY_AMOUNT
-            if usdt_balance['available'] > required_usdt:
-                logger.info(f"🟢 买入信号 - 价格 {current_price} < 目标 {self.config.TARGET_BUY_PRICE}")
-                order_id = self.trader.place_order(
-                    'buy',
-                    self.config.BUY_AMOUNT,
-                    current_price
-                )
-                if order_id:
-                    self.buy_hold = True
-                    self.last_buy_price = current_price
-                    return True
-            else:
-                logger.warning(f"余额不足 - 需要: {required_usdt}, 可用: {usdt_balance['available']}")
-        
-        # 卖出逻辑
-        if current_price > self.config.TARGET_SELL_PRICE and self.buy_hold:
-            btc_amount = self.trader.get_cryptocurrency_balance("BTC")
-            if btc_amount and btc_amount >= self.config.SELL_AMOUNT:
-                profit = (current_price - self.last_buy_price) * self.config.SELL_AMOUNT if self.last_buy_price else D(0)
-                logger.info(f"🔴 卖出信号 - 价格 {current_price} > 目标 {self.config.TARGET_SELL_PRICE}")
-                logger.info(f"预期收益: {profit} USDT (买入价: {self.last_buy_price})")
-                order_id = self.trader.place_order(
-                    'sell',
-                    self.config.SELL_AMOUNT,
-                    current_price
-                )
-                if order_id:
-                    self.buy_hold = False
-                    return True
-        
-        return False
-    
-    def check_pending_orders(self):
-        """检查待处理订单"""
-        orders = self.trader.list_pending_orders()
-        if orders:
-            logger.info(f"待处理订单: {len(orders)}笔")
-            for order in orders:
-                logger.info(f"  - {order['side'].upper()} | 数量: {order['amount']} | 价格: {order['price']}")
+
 
 
 # ============ 机器人主程序 ============
 def run_bot(config: TradingConfig):
     """运行交易机器人"""
-    logger.info("=" * 50)
-    logger.info("交易机器人启动")
-    logger.info("=" * 50)
-    logger.info(f"交易对: {config.CURRENCY_PAIR}")
-    logger.info(f"买入目标价: {config.TARGET_BUY_PRICE} USDT")
-    logger.info(f"卖出目标价: {config.TARGET_SELL_PRICE} USDT")
-    logger.info("=" * 50)
-    
     trader = GateIOTrader(config)
-    strategy = TradingStrategy(trader, config)
     
     try:
         while True:
             try:
-                logger.info("-" * 50)
+                # 获取行情
+                ticker = trader.get_ticker()
+                if ticker:
+                    print(ticker)
+                else:
+                    # 获取不到行情，进行网络检测
+                    if check_network():
+                        print("❌ 交易所故障：网络正常，但无法获取行情数据")
+                    else:
+                        print("❌ 网络异常：无法连接到网络")
                 
-                # 执行交易策略
-                strategy.simple_strategy()
-                
-                # 检查待处理订单
-                strategy.check_pending_orders()
-                
-                # 等待下一次检查
-                logger.info(f"等待 {config.CHECK_INTERVAL} 秒后进行下一次检查...\n")
                 time.sleep(config.CHECK_INTERVAL)
                 
             except KeyboardInterrupt:
-                logger.info("收到退出信号，停止机器人")
                 break
             except Exception as e:
-                logger.error(f"发生错误: {e}")
-                logger.info(f"等待 {config.ERROR_WAIT_TIME} 秒后重试...\n")
                 time.sleep(config.ERROR_WAIT_TIME)
     
     except KeyboardInterrupt:
-        logger.info("机器人已停止")
-    finally:
-        logger.info("=" * 50)
-        logger.info("交易机器人已关闭")
-        logger.info("=" * 50)
+        pass
 
 
 if __name__ == '__main__':

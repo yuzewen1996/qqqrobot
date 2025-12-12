@@ -240,7 +240,7 @@ tail -100 trading_bot.log
 
 3. **查看代码注释**
    - `v2_improved.py` 中有详细的中文注释
-   - `advanced_strategies.py` 中有策略实现参考
+   - `all_strategies.py` 中有策略实现参考，建议直接在 all_strategies.py 中扩展或新增你的策略类，便于统一管理和调用。
 
 4. **测试简单用例**
 ```python

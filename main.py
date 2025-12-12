@@ -203,18 +203,141 @@ class GateIOTrader:
 
 
 
-# ============ 交易策略 ============
-class TradingStrategy:
-    """交易策略类"""
-    
-    def __init__(self, trader: GateIOTrader, config: TradingConfig):
-        self.trader = trader
-        self.config = config
-        self.last_buy_price = None  # 记录最后的买入价格
-        self.buy_hold = False  # 是否持有买入仓位
-    
+# ============ 策略统一导入 ============
 
+# ============ 策略统一导入 ============
+from all_strategies import MAStrategy, RSIStrategy, GridTradingStrategy, EMABreakoutStrategy, BollingerBandsStrategy, MomentumBreakoutStrategy, MACDFastStrategy, VolatilityBreakoutStrategy
 
+# ============ 多币种详细仓位查询类 ============
+class FuturesPositionQuery:
+    """期货/永续合约仓位查询（支持多币种）"""
+    def __init__(self, api_key: str, api_secret: str):
+        configuration = gate_api.Configuration(
+            host="https://api.gateio.ws/api/v4",
+            key=api_key,
+            secret=api_secret
+        )
+        self.api_client = gate_api.ApiClient(configuration)
+        self.futures_api = gate_api.FuturesApi(self.api_client)
+        logger.info("期货 API 客户端已初始化")
+
+    def get_account_leverage(self, settle: str = 'usdt'):
+        try:
+            account = self.futures_api.list_futures_accounts(settle=settle)
+            if account:
+                cross_leverage = getattr(account, 'cross_leverage', None)
+                logger.info(f"[INFO] {settle.upper()} 账户全仓杠杆: {cross_leverage}")
+                return cross_leverage
+        except Exception as e:
+            logger.error(f"[ERROR] 获取账户杠杆失败: {e}")
+        return None
+
+    def get_all_positions(self, settle: str = 'usdt'):
+        try:
+            logger.info(f"\n[*] 获取 {settle.upper()} 所有合约仓位...")
+            account_leverage = self.get_account_leverage(settle)
+            positions = self.futures_api.list_positions(settle=settle)
+            if not positions:
+                logger.info(f"   {settle.upper()} 无持仓")
+                return []
+            result = []
+            for pos in positions:
+                try:
+                    size_float = float(pos.size) if pos.size else 0
+                    if abs(size_float) == 0:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+                leverage_val = D(str(pos.leverage)) if pos.leverage and str(pos.leverage) != '0' else D(0)
+                final_leverage = D(0)
+                if leverage_val > 0:
+                    final_leverage = leverage_val
+                elif hasattr(pos, 'cross_leverage_limit') and pos.cross_leverage_limit:
+                    try:
+                        final_leverage = D(str(pos.cross_leverage_limit))
+                    except:
+                        pass
+                elif account_leverage:
+                    try:
+                        final_leverage = D(str(account_leverage))
+                    except:
+                        pass
+                entry_price_val = D(str(pos.entry_price)) if pos.entry_price else D(0)
+                mark_price_val = D(str(pos.mark_price)) if pos.mark_price else D(0)
+                size_val = D(str(pos.size))
+                roi_percent = D(0)
+                if entry_price_val > 0:
+                    price_change_rate = (mark_price_val - entry_price_val) / entry_price_val
+                    if size_val > 0:
+                        roi_percent = price_change_rate * final_leverage * 100
+                    else:
+                        roi_percent = -price_change_rate * final_leverage * 100
+                result.append({
+                    'contract': str(pos.contract) if pos.contract else 'N/A',
+                    'size': size_val,
+                    'leverage': final_leverage,
+                    'entry_price': entry_price_val,
+                    'mark_price': mark_price_val,
+                    'unrealised_pnl': D(str(pos.unrealised_pnl)) if pos.unrealised_pnl else D(0),
+                    'roi_percent': roi_percent,
+                    'pnl_percent': D(str(pos.pnl_percent)) if hasattr(pos, 'pnl_percent') and pos.pnl_percent else D(0),
+                    'margin': D(str(pos.margin)) if hasattr(pos, 'margin') and pos.margin else D(0),
+                    'maintenance_rate': D(str(pos.maintenance_rate)) if hasattr(pos, 'maintenance_rate') and pos.maintenance_rate else D(0),
+                })
+            logger.info(f"   找到 {len(result)} 个有持仓的合约")
+            return result
+        except GateApiException as ex:
+            logger.error(f"Gate API异常 - {ex.label}: {ex.message}")
+        except ApiException as e:
+            logger.error(f"API异常: {e}")
+        return []
+
+    def get_usdt_perpetual_positions(self):
+        return self.get_all_positions(settle='usdt')
+
+    def get_btc_perpetual_positions(self):
+        return self.get_all_positions(settle='btc')
+
+    def get_all_settle_positions(self):
+        result = {}
+        usdt_pos = self.get_usdt_perpetual_positions()
+        if usdt_pos:
+            result['usdt'] = usdt_pos
+        btc_pos = self.get_btc_perpetual_positions()
+        if btc_pos:
+            result['btc'] = btc_pos
+        return result
+
+# ============ 仓位信息格式化打印 ============
+def print_positions(positions, title: str):
+    if not positions:
+        print(f"\n{title}")
+        print("   无持仓")
+        return
+    print(f"\n{title}")
+    print("-" * 145)
+    print(f"{'合约':<18} {'方向':<8} {'数量':<15} {'入场价':<18} {'标记价':<18} {'未实现盈亏':<18} {'收益率':<12} {'杠杆':<10}")
+    print("-" * 145)
+    for pos in positions:
+        direction = "[多]" if pos['size'] > 0 else "[空]"
+        size = abs(pos['size'])
+        leverage_val = pos['leverage']
+        if isinstance(leverage_val, D):
+            leverage_str = f"{float(leverage_val):.1f}x"
+        else:
+            leverage_str = f"{float(leverage_val):.1f}x" if leverage_val and leverage_val != 0 else "N/A"
+        pnl_val = float(pos['unrealised_pnl'])
+        if pnl_val >= 0:
+            pnl_display = f"[+] {pnl_val:>12.2f}"
+        else:
+            pnl_display = f"[-] {pnl_val:>12.2f}"
+        roi_val = float(pos['roi_percent'])
+        if roi_val >= 0:
+            roi_display = f"[+]{roi_val:>7.2f}%"
+        else:
+            roi_display = f"[{roi_val:>8.2f}%"
+        print(f"{pos['contract']:<18} {direction:<8} {float(size):<15.4f} {float(pos['entry_price']):<18.2f} {float(pos['mark_price']):<18.2f} {pnl_display:<18} {roi_display:<12} {leverage_str:<10}")
+    print("-" * 145)
 
 # ============ 显示功能 ============
 def display_positions(trader: GateIOTrader):
@@ -269,6 +392,7 @@ def display_menu():
     print("  4. 启动自动策略")
     print("  5. 查看订单")
     print("  6. 设置参数")
+    print("  7. 详细合约仓位查询（多币种）")
     print("  0. 退出程序")
     print("-" * 80)
 
@@ -288,8 +412,32 @@ def handle_strategy_view(trader: GateIOTrader):
 
 def handle_auto_strategy(trader: GateIOTrader):
     """启动自动策略"""
-    print("\n🤖 自动策略功能开发中...")
-    print("即将支持: MA策略、RSI策略、网格交易等")
+    print("\n🤖 策略示例调用：")
+    # 示例：获取K线数据（假设trader有get_kline方法，实际请根据你的API实现调整）
+    try:
+        # 假设有BTC_USDT合约，获取最近50根K线
+        candles = []
+        if hasattr(trader, 'get_candlesticks'):
+            candles = trader.get_candlesticks('BTC_USDT', interval='1h', limit=50)
+        elif hasattr(trader, 'get_kline'):
+            candles = trader.get_kline('BTC_USDT', interval='1h', limit=50)
+        if not candles:
+            print("未获取到K线数据，无法演示策略调用。")
+            return
+        # MA策略
+        ma_strategy = MAStrategy(trader, 'BTC_USDT')
+        ma_signal = ma_strategy.generate_signal(candles)
+        print(f"MA策略信号: {ma_signal}")
+        # RSI策略
+        rsi_strategy = RSIStrategy(trader, 'BTC_USDT')
+        rsi_signal = rsi_strategy.generate_signal(candles)
+        print(f"RSI策略信号: {rsi_signal}")
+        # 网格策略
+        grid_strategy = GridTradingStrategy(D('40000'), D('60000'), grid_count=10)
+        grid_orders = grid_strategy.get_orders(D(candles[-1]['close']))
+        print(f"网格策略订单数: {len(grid_orders)}")
+    except Exception as e:
+        print(f"策略调用示例出错: {e}")
 
 
 def handle_view_orders(trader: GateIOTrader):
@@ -297,31 +445,20 @@ def handle_view_orders(trader: GateIOTrader):
     print("\n📜 订单查询功能开发中...")
 
 
-def handle_settings(config: TradingConfig):
-    """设置参数"""
-    print("\n⚙️ 当前配置:")
-    print(f"  合约: {config.CONTRACT}")
-    print(f"  结算货币: {config.SETTLE.upper()}")
-    print(f"  默认张数: {config.DEFAULT_SIZE}")
-    print(f"  默认杠杆: {config.DEFAULT_LEVERAGE}x")
-    print(f"  使用测试网: {'是' if config.USE_TESTNET else '否'}")
-
-
-# ============ 机器人主程序 ============
 def run_bot(config: TradingConfig):
     """运行交易机器人主程序"""
     try:
         trader = GateIOTrader(config)
-        
         # 启动时显示仓位信息
         display_positions(trader)
-        
+        # 初始化多币种查询类
+        api_key, api_secret = config.API_KEY, config.API_SECRET
+        futures_query = FuturesPositionQuery(api_key, api_secret)
         # 主循环
         while True:
             try:
                 display_menu()
-                choice = input("请输入选项 (0-6): ").strip()
-                
+                choice = input("请输入选项 (0-7): ").strip()
                 if choice == '0':
                     print("\n👋 退出程序...")
                     break
@@ -334,6 +471,35 @@ def run_bot(config: TradingConfig):
                 elif choice == '4':
                     handle_auto_strategy(trader)
                 elif choice == '5':
+                    handle_view_orders(trader)
+                elif choice == '6':
+                    handle_settings(config)
+                elif choice == '7':
+                    print("\n========== 多币种详细合约仓位查询 ==========")
+                    all_positions = futures_query.get_all_settle_positions()
+                    if not all_positions:
+                        print("\n[!] 未找到任何合约持仓")
+                    else:
+                        if 'usdt' in all_positions:
+                            print_positions(all_positions['usdt'], "[USDT] 永续合约仓位")
+                        else:
+                            print("\n[USDT] 永续合约仓位\n   无持仓")
+                        if 'btc' in all_positions:
+                            print_positions(all_positions['btc'], "[BTC] 永续合约仓位")
+                        else:
+                            print("\n[BTC] 永续合约仓位\n   无持仓")
+                    print("\n========== 查询完成 ==========")
+                else:
+                    print("❌ 无效选项，请重新输入")
+            except KeyboardInterrupt:
+                print("\n\n👋 检测到中断信号，退出程序...")
+                break
+            except Exception as e:
+                logger.error(f"操作出错: {e}")
+                print(f"❌ 操作失败: {e}")
+    except Exception as e:
+        logger.error(f"程序启动失败: {e}")
+        print(f"❌ 程序启动失败: {e}")
                     handle_view_orders(trader)
                 elif choice == '6':
                     handle_settings(config)
@@ -358,7 +524,9 @@ if __name__ == '__main__':
     try:
         # 创建配置对象
         config = TradingConfig()
-        
+        # === 这里控制是否连接测试网 ===
+        config.USE_TESTNET = True  # True=测试网，False=实盘
+        # ===========================
         # 运行机器人
         run_bot(config)
     except Exception as e:

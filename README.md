@@ -23,7 +23,7 @@
 |------|------|------|
 | `v1.py` | 基础版本 | ⭐ |
 | `v2_improved.py` | 改进版本（推荐） | ⭐⭐ |
-| `advanced_strategies.py` | 高级策略示例 | ⭐⭐⭐ |
+| `all_strategies.py` | 全部主流策略整合 | ⭐⭐⭐ |
 | `GUIDE.md` | 详细使用指南 | - |
 | `QUICK_REFERENCE.md` | 快速参考 | - |
 | `README.md` | 项目说明 | - |
@@ -38,19 +38,24 @@ pip install gate-api
 
 ### 2. 配置API密钥
 
-编辑 `v2_improved.py`：
+推荐使用 `.env` 文件存放密钥：
+
+```
+GATE_API_KEY=你的APIKEY
+GATE_API_SECRET=你的APISECRET
+```
+
+是否连接测试网请在主程序 `main.py` 中设置：
 
 ```python
-class TradingConfig:
-    API_KEY = "your_api_key_here"
-    API_SECRET = "your_api_secret_here"
-    USE_TESTNET = True  # 首次建议使用测试网
+config = TradingConfig()
+config.USE_TESTNET = True  # True=测试网，False=实盘
 ```
 
 ### 3. 运行机器人
 
 ```bash
-python v2_improved.py
+python main.py
 ```
 
 ### 4. 监控日志
@@ -65,41 +70,37 @@ tail -f trading_bot.log
 
 1. **阅读** `GUIDE.md` - 了解基础概念
 2. **修改** `TradingConfig` - 配置你的策略参数
-3. **测试** 在测试网上运行 (`USE_TESTNET = True`)
+3. **测试** 在测试网上运行 (`config.USE_TESTNET = True`)
 
 ### 中级用户
 
-1. **学习** `v2_improved.py` - 理解代码结构
+1. **学习** `main.py` - 理解主控结构
 2. **参考** `QUICK_REFERENCE.md` - API速查表
-3. **改进** 添加自己的策略逻辑
+3. **改进** 添加自己的策略逻辑（见 all_strategies.py）
 
 ### 高级用户
 
-1. **研究** `advanced_strategies.py` - 了解复杂策略
+1. **研究** `all_strategies.py` - 了解全部主流策略
 2. **扩展** 设计自己的交易策略
 3. **优化** 性能调优和风险控制
 
-## 💻 代码示例
-
-### 基础下单
+### 策略调用示例
 
 ```python
-from v2_improved import GateIOTrader, TradingConfig
-from decimal import Decimal as D
+from all_strategies import MAStrategy, RSIStrategy, GridTradingStrategy
 
-config = TradingConfig()
-trader = GateIOTrader(config)
-
-# 获取行情
-ticker = trader.get_ticker()
-print(f"当前价格: {ticker['last']} USDT")
-
-# 下买单
-order_id = trader.place_order('buy', D("0.001"), D("50000"))
+# 假设已获取K线数据candles，trader为API对象
+ma_strategy = MAStrategy(trader, 'BTC_USDT')
+ma_signal = ma_strategy.generate_signal(candles)
+print(f"MA策略信号: {ma_signal}")
 
 # 查询订单
 order = trader.get_order(order_id)
+print(f"RSI策略信号: {rsi_signal}")
+
 print(f"订单状态: {order['status']}")
+```
+print(f"网格策略订单数: {len(grid_orders)}")
 ```
 
 ### 自定义策略

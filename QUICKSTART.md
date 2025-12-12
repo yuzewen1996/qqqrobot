@@ -24,27 +24,26 @@ export GATE_API_SECRET="your_api_secret_here"
 
 ## 3️⃣ 修改交易参数（可选）
 
-编辑 `v2_improved.py` 中的 `TradingConfig` 类：
+在 `main.py` 或 `TradingConfig` 类中设置参数：
 
 ```python
 class TradingConfig:
-    # ...
-    CURRENCY_PAIR = "BTC_USDT"          # 交易对
-    TARGET_BUY_PRICE = D("50000")       # 买入目标价
-    TARGET_SELL_PRICE = D("60000")      # 卖出目标价
-    BUY_AMOUNT = D("0.001")             # 买入数量（BTC）
-    CHECK_INTERVAL = 10                 # 检查间隔（秒）
-    USE_TESTNET = False                 # 是否使用测试网
+    CURRENCY_PAIR = "BTC_USDT"
+    TARGET_BUY_PRICE = D("50000")
+    TARGET_SELL_PRICE = D("60000")
+    BUY_AMOUNT = D("0.001")
+    CHECK_INTERVAL = 10
+    USE_TESTNET = False  # True=测试网
 ```
 
 ## 4️⃣ 运行机器人
 
 ```bash
 # 本地开发（使用 .env）
-python v2_improved.py
+python main.py
 
 # 或在服务器上（使用环境变量）
-GATE_API_KEY=xxx GATE_API_SECRET=xxx python v2_improved.py
+GATE_API_KEY=xxx GATE_API_SECRET=xxx python main.py
 ```
 
 ## 5️⃣ 查看日志
@@ -57,8 +56,8 @@ GATE_API_KEY=xxx GATE_API_SECRET=xxx python v2_improved.py
 在测试网上运行（不实际交易）：
 
 ```python
-# 编辑 v2_improved.py
-USE_TESTNET = True
+# 在 main.py 或 TradingConfig 中设置
+config.USE_TESTNET = True
 ```
 
 然后运行即可。
@@ -69,7 +68,7 @@ USE_TESTNET = True
 - [ ] 已设置 API 密钥（.env 或环境变量）
 - [ ] 已确认交易参数（交易对、价格、数量）
 - [ ] 已确认账户余额充足
-- [ ] 已在测试网测试过（推荐）
+    - [ ] 已在测试网测试过（推荐，main.py 设置 config.USE_TESTNET = True）
 - [ ] 已检查 `trading_bot.log` 确认无错误
 
 ## 🛑 停止机器人

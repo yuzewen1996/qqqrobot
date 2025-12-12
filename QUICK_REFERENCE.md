@@ -6,7 +6,7 @@
 qqqrobot/
 ├── v1.py                    # 原始版本（基础功能）
 ├── v2_improved.py           # ✨ 改进版本（推荐使用）
-├── advanced_strategies.py   # 高级策略示例
+├── all_strategies.py        # 全部主流策略整合
 ├── GUIDE.md                 # 详细使用指南
 └── trading_bot.log         # 运行日志（自动生成）
 ```

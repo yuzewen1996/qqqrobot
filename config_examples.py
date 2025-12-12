@@ -5,12 +5,12 @@
 请根据需要复制相应的配置类到你的代码中
 """
 
-from v2_improved import TradingConfig, GateIOTrader, TradingStrategy, run_bot
+# from v2_improved import TradingConfig, GateIOTrader, TradingStrategy, run_bot
 from decimal import Decimal as D
 
 
 # ============ 配置方案1: 保守型交易 ============
-class ConservativeConfig(TradingConfig):
+class ConservativeConfig:
     """保守型 - 低风险，低收益"""
     # 资金管理
     BUY_AMOUNT = D("0.001")           # 较小的单笔交易量
@@ -26,7 +26,7 @@ class ConservativeConfig(TradingConfig):
 
 
 # ============ 配置方案2: 平衡型交易 ============
-class BalancedConfig(TradingConfig):
+class BalancedConfig:
     """平衡型 - 中等风险，中等收益（推荐新手）"""
     # 资金管理
     BUY_AMOUNT = D("0.005")
@@ -42,7 +42,7 @@ class BalancedConfig(TradingConfig):
 
 
 # ============ 配置方案3: 激进型交易 ============
-class AggressiveConfig(TradingConfig):
+class AggressiveConfig:
     """激进型 - 高风险，高收益（仅供高手）"""
     # 资金管理
     BUY_AMOUNT = D("0.01")            # 较大的单笔交易量
@@ -84,7 +84,7 @@ class MultiPairConfig:
 
 
 # ============ 配置方案5: 日间交易配置 ============
-class DayTradingConfig(TradingConfig):
+class DayTradingConfig:
     """日间交易 - 在工作时间内进行频繁交易"""
     BUY_AMOUNT = D("0.001")
     SELL_AMOUNT = D("0.001")
@@ -102,7 +102,7 @@ class DayTradingConfig(TradingConfig):
 
 
 # ============ 配置方案6: 长期持仓配置 ============
-class LongTermConfig(TradingConfig):
+class LongTermConfig:
     """长期持仓 - 看好长期趋势"""
     BUY_AMOUNT = D("0.1")             # 一次性买入较多
     SELL_AMOUNT = D("0.05")           # 分次卖出
@@ -116,7 +116,7 @@ class LongTermConfig(TradingConfig):
 
 
 # ============ 配置方案7: 网格交易配置 ============
-class GridTradingConfig(TradingConfig):
+class GridTradingConfig:
     """网格交易 - 在价格区间内进行网格化交易"""
     
     # 网格参数
@@ -133,7 +133,7 @@ class GridTradingConfig(TradingConfig):
 
 
 # ============ 配置工厂函数 ============
-def get_config(config_type: str) -> TradingConfig:
+def get_config(config_type: str):
     """获取配置
     
     Args:
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     logger.info(f"  检查间隔: {config.CHECK_INTERVAL}秒")
     
     # 方法2: 自定义配置
-    class CustomConfig(TradingConfig):
+    class CustomConfig:
         API_KEY = "YOUR_API_KEY"
         API_SECRET = "YOUR_API_SECRET"
         CURRENCY_PAIR = "ETH_USDT"

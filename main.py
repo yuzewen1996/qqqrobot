@@ -81,23 +81,6 @@ class TradingConfig:
     _api_key = None
     _api_secret = None
     
-    def __init__(self):
-        """初始化配置，加载 API 密钥"""
-        if TradingConfig._api_key is None:
-            try:
-                TradingConfig._api_key, TradingConfig._api_secret = load_env_config()
-            except ValueError as e:
-                logger.error(str(e))
-                raise
-    
-    @property
-    def API_KEY(self):
-        return TradingConfig._api_key
-    
-    @property
-    def API_SECRET(self):
-        return TradingConfig._api_secret
-    
     # API端点
     LIVE_HOST = "https://api.gateio.ws/api/v4"  # 实盘
     TESTNET_HOST = "https://fx-api-testnet.gateio.ws/api/v4"  # 测试网
@@ -113,7 +96,24 @@ class TradingConfig:
     # 机器人参数
     CHECK_INTERVAL = 10  # 检查间隔（秒）
     ERROR_WAIT_TIME = 5  # 错误后等待时间（秒）
-    USE_TESTNET = False  # 是否使用测试网
+    
+    def __init__(self):
+        """初始化配置，加载 API 密钥"""
+        if TradingConfig._api_key is None:
+            try:
+                TradingConfig._api_key, TradingConfig._api_secret = load_env_config()
+            except ValueError as e:
+                logger.error(str(e))
+                raise
+        self.USE_TESTNET = False  # 是否使用测试网
+    
+    @property
+    def API_KEY(self):
+        return TradingConfig._api_key
+    
+    @property
+    def API_SECRET(self):
+        return TradingConfig._api_secret
 
 
 # ============ 日志配置 ============
@@ -365,10 +365,23 @@ def display_positions(trader: GateIOTrader):
                 elif 'single' in pos['mode']:
                     mode_str = " [单向持仓]"
             
+            # 计算收益率百分比（按照本金计算）
+            roi_percent = 0.0
+            if pos['value'] > 0 and pos['leverage'] > 0:
+                # 本金 = 仓位价值 ÷ 杠杆倍数
+                principal = pos['value'] / pos['leverage']
+                roi_percent = (pos['unrealised_pnl'] / principal) * 100
+            elif pos['value'] > 0:
+                # 如果没有杠杆信息，用仓位价值作为本金
+                roi_percent = (pos['unrealised_pnl'] / pos['value']) * 100
+            
+            roi_sign = "+" if roi_percent >= 0 else ""
+            roi_color = "📈" if roi_percent >= 0 else "📉"
+            
             print(f"\n合约: {pos['contract']}")
             print(f"  方向: {side} | 仓位价值: {pos['value']:.2f} USDT | 杠杆: {leverage_str}{mode_str}")
             print(f"  开仓价: {pos['entry_price']:.2f} | 标记价: {pos['mark_price']:.2f}")
-            print(f"  未实现盈亏: {pnl_color} {pnl_sign}{pos['unrealised_pnl']:.4f} USDT")
+            print(f"  未实现盈亏: {pnl_color} {pnl_sign}{pos['unrealised_pnl']:.4f} USDT | 收益率: {roi_color} {roi_sign}{roi_percent:.2f}%")
             print(f"  占用保证金: {pos['margin']:.4f} USDT")
     
     # 显示账户信息
@@ -500,22 +513,6 @@ def run_bot(config: TradingConfig):
     except Exception as e:
         logger.error(f"程序启动失败: {e}")
         print(f"❌ 程序启动失败: {e}")
-                    handle_view_orders(trader)
-                elif choice == '6':
-                    handle_settings(config)
-                else:
-                    print("❌ 无效选项，请重新输入")
-                
-            except KeyboardInterrupt:
-                print("\n\n👋 检测到中断信号，退出程序...")
-                break
-            except Exception as e:
-                logger.error(f"操作出错: {e}")
-                print(f"❌ 操作失败: {e}")
-    
-    except Exception as e:
-        logger.error(f"程序启动失败: {e}")
-        print(f"❌ 程序启动失败: {e}")
 
 
 if __name__ == '__main__':
@@ -525,7 +522,7 @@ if __name__ == '__main__':
         # 创建配置对象
         config = TradingConfig()
         # === 这里控制是否连接测试网 ===
-        config.USE_TESTNET = True  # True=测试网，False=实盘
+        config.USE_TESTNET = False  # True=测试网，False=实盘
         # ===========================
         # 运行机器人
         run_bot(config)

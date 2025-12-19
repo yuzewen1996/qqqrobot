@@ -1,0 +1,12 @@
+# 交易配置文件
+
+# 合约配置
+contract: "ASTER_USDT"  # 要监控的合约
+
+# 止损止盈价格
+stop_loss_price: 0.912    # 止损价
+take_profit_price: 0.9792  # 止盈价
+
+# 运行配置
+check_interval: 60  # 检查间隔（秒）
+settle: "usdt"      # 结算货币

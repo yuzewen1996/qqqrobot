@@ -1,123 +1,122 @@
-# 项目指南（GUIDE）
+# QQQRobot 使用指南 (GUIDE)
 
-## 项目简介
-本项目是一个自动化量化交易机器人，支持多种策略（如网格、止损、趋势跟随），具备风控、通知、数据存储等模块，适用于多平台（Windows、Ubuntu）。
+本指南将帮助你从零开始安装、配置、运行和部署 QQQRobot。
 
-## 目录结构
-- `main.py`：主程序入口
-- `interactive_bot.py`：交互式机器人入口
-- `auto_stop_loss.py`：自动止损脚本
-- `core/`：核心功能模块
-    - `engine.py`：交易引擎
-    - `exchange.py`：交易所接口
-    - `notifier.py`：通知模块
-    - `risk_control.py`：风控模块
-- `strategies/`：策略模块
-    - `base_strategy.py`：策略基类
-    - `grid.py`：网格策略
-    - `stop_loss.py`：止损策略
-    - `trend_following.py`：趋势跟随策略
-- `data/`：数据存储模块
-    - `storage.py`：数据存储实现
-- `config/`：配置文件
-    - `settings.yaml`：主配置文件
-- `logs/`：日志目录
-- `scripts/`：启动/停止脚本
-    - `ubuntu/`、`windows/`：不同平台的脚本
+## 1. 环境准备
 
-## 快速开始
-1. 安装依赖：
-     ```bash
-     pip install -r requirements.txt
-     ```
-2. 配置参数：
-     - 修改 `config/settings.yaml` 以适配你的交易所和策略需求。
-3. 启动机器人：
-     ```bash
-     python main.py
-     ```
-     或使用 `scripts/` 下的启动脚本。
+### 系统要求
+- **操作系统**: Windows 10/11, macOS, 或 Linux (Ubuntu 20.04+ 推荐)
+- **Python**: 版本 3.8 或更高
 
-## 策略扩展
-- 新增策略请继承 `strategies/base_strategy.py`，并在 `main.py` 或相关入口注册。
+### 安装步骤
 
-## 其他说明
-- 日志文件保存在 `logs/` 目录。
-- 支持多平台运行，推荐使用 Ubuntu 或 Windows。
-- 风控、通知等功能可在 `core/` 目录下扩展。
+1. **克隆或下载代码**
+   确保你已经获取了项目的最新代码。
 
-## 常见问题
-- 配置错误：请检查 `settings.yaml` 格式及参数。
-- 依赖缺失：请确保已正确安装 requirements.txt。
+2. **安装依赖**
+   在项目根目录下打开终端，运行以下命令安装所需的 Python 库：
+   ```bash
+   pip install -r requirements.txt
+   ```
 
----
-如需详细开发文档或遇到问题，请查阅 INDEX.md 或联系维护者。
+## 2. 配置参数
 
-### 本地运行 (Windows/Mac)
+所有配置文件均位于 `config/` 目录下。
 
-直接运行 `main.py`：
+### 2.1 API 密钥配置 (.env)
+在 `config/` 目录下创建一个名为 `.env` 的文件（如果不存在），并填入你的 Gate.io API 密钥：
+```env
+GATE_API_KEY=your_api_key_here
+GATE_API_SECRET=your_api_secret_here
+```
+> **注意**: 请勿将 `.env` 文件提交到版本控制系统（如 Git），以防密钥泄露。
+
+### 2.2 策略与风控配置 (settings.yaml)
+编辑 `config/settings.yaml` 文件以调整运行参数：
+
+- **exchange**: 设置交易所相关参数（如是否使用测试网）。
+- **strategies**: 启用或禁用策略，并设置具体参数（如止损比例、网格数量）。
+- **risk_control**: 设置全局风控参数（如最大持仓、单日最大亏损）。
+
+## 3. 本地运行 (Windows/Mac)
+
+### 启动主程序
+配置完成后，直接运行 `main.py` 启动机器人：
 
 ```bash
 python main.py
 ```
 
 如果看到类似以下的日志，说明启动成功：
-```
+```text
 2025-12-19 18:00:00 - INFO - 交易所 API 初始化完成
 2025-12-19 18:00:00 - INFO - 已加载策略: ['StopLossStrategy']
 2025-12-19 18:00:00 - INFO - 引擎启动，检查间隔: 60秒
 ```
 
-### 交互式模式 (旧版功能)
-
-如果你需要手动查询账户或下单，可以使用交互式工具：
+### 交互式模式
+如果你需要手动查询账户余额、当前持仓或手动下单，可以使用交互式工具：
 
 ```bash
 python interactive_bot.py
 ```
 
-## 5. 服务器部署 (Linux/Ubuntu)
+## 4. 服务器部署 (Linux/Ubuntu)
 
-本项目提供了方便的 Shell 脚本用于 Linux 环境部署。
+本项目提供了方便的 Shell 脚本用于 Linux 环境部署，位于 `scripts/ubuntu/` 目录下。
 
-### 脚本位置
-所有脚本位于 `scripts/ubuntu/` 目录下。
-
-### 常用命令
-
-首先赋予脚本执行权限：
+### 4.1 赋予执行权限
+首次部署时，需要赋予脚本执行权限：
 ```bash
 chmod +x scripts/ubuntu/*.sh
 ```
 
+### 4.2 常用命令
+
 | 功能 | 命令 | 说明 |
 |------|------|------|
-| **启动** | `./scripts/ubuntu/start_background.sh` | 在后台启动机器人 (推荐) |
-| **停止** | `./scripts/ubuntu/stop.sh` | 停止正在运行的机器人 |
-| **检查** | `./scripts/ubuntu/check_ubuntu.sh` | 检查环境依赖和配置 |
-| **前台运行** | `./scripts/ubuntu/start.sh` | 在当前终端运行 (用于调试) |
+| **后台启动** | `./scripts/ubuntu/start_background.sh` | 推荐方式，即使断开 SSH 连接也会继续运行 |
+| **停止运行** | `./scripts/ubuntu/stop.sh` | 安全停止正在运行的机器人 |
+| **环境检查** | `./scripts/ubuntu/check_ubuntu.sh` | 检查 Python 环境和依赖是否就绪 |
+| **前台调试** | `./scripts/ubuntu/start.sh` | 在当前终端运行，Ctrl+C 可退出 |
 
-### 查看日志
-
-后台运行时，日志会输出到 `logs/bot.log` (或项目根目录下的 `auto_trade.log`)。
+### 4.3 查看日志
+后台运行时，日志会输出到 `logs/bot.log`。使用以下命令实时查看：
 
 ```bash
 tail -f logs/bot.log
 ```
 
-## 6. 常见问题
+## 5. 策略开发
+
+如果你需要开发新的交易策略，请遵循以下步骤：
+
+1. **创建文件**: 在 `strategies/` 目录下新建 Python 文件（例如 `my_strategy.py`）。
+2. **继承基类**: 导入并继承 `BaseStrategy` 类。
+3. **实现逻辑**: 重写 `run()` 方法，编写你的交易逻辑。
+4. **注册策略**: 在 `main.py` 或配置文件中启用你的新策略。
+
+示例代码：
+```python
+from strategies.base_strategy import BaseStrategy
+
+class MyStrategy(BaseStrategy):
+    def run(self):
+        # 获取行情
+        ticker = self.exchange.get_ticker(self.symbol)
+        # 你的交易逻辑...
+```
+
+## 6. 常见问题 (FAQ)
 
 **Q: 报错 `ValueError: 未找到 API 密钥配置`**
-A: 请检查 `config/.env` 文件是否存在，且内容格式正确。确保没有多余的空格。
+A: 请检查 `config/.env` 文件是否存在，且内容格式正确（KEY=VALUE）。
 
 **Q: 报错 `ImportError: No module named ...`**
 A: 请确保已运行 `pip install -r requirements.txt` 安装所有依赖。
 
-**Q: 如何添加新策略？**
-A: 
-1. 在 `strategies/` 目录下新建 Python 文件（如 `my_strategy.py`）。
-2. 继承 `BaseStrategy` 类并实现 `run` 方法。
-3. 在 `core/engine.py` 中引入并注册你的新策略。
+**Q: 如何修改交易对？**
+A: 在 `config/settings.yaml` 中找到 `symbol` 字段进行修改（例如 `BTC_USDT`）。
 
 ---
-如有更多问题，请提交 Issue 或联系开发者。
+如需更多帮助，请联系项目维护者。
